@@ -73,25 +73,46 @@ int main(int argc, char ** argv)
     }
 
 
+
+
+
+
+
+
+    std::cout << "buffer data: \n";
     buffer = new char[1024];
     for(int i = 0; i < 1024; i++)
     {
-        buffer[i] = i%2;
+        buffer[i] = (i%2)?('1'):('0');
+        std::cout << buffer[i];
     }
-    //::memset(buffer, '1', 1024);
+    std::cout << "\n--------------------" << std::endl;
 
     ////////////////////////////////////////////////////////////////
     missing_bytes = output_file_size;
-    for(int i = 0;missing_bytes != 0;i++)
+    std::cout << "missing bytes = " << missing_bytes << '\n';
+    std::cout << "bytes to write = " << bytes_to_write << '\n';
+
+    for(int i = 0; data_written < output_file_size; ++i)
     {
         //std::cout << i << "\n"; debug
         if(missing_bytes < 1024)
+        {
             bytes_to_write = missing_bytes;
-        ::memcpy(mapped_output_file, buffer, bytes_to_write);
+        }
+
+        if(::memcpy(mapped_output_file + data_written, buffer, bytes_to_write) == nullptr)
+        {
+            std::cout << "(memcpy)" << std::error_code(errno, std::system_category()).message();
+            return 1;
+        }
+
         data_written += bytes_to_write;
         missing_bytes -= bytes_to_write;
     }
     ////////////////////////////////////////////////////////////////
+    std::cout << "\n--End writing--\n";
+
 
     output_file_final_size = ::lseek64(output_file_descriptor,0 ,SEEK_END);
 
