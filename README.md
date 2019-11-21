@@ -4,7 +4,7 @@
 This code creates a file with N bytes in very little time, as its purpouse initially was for testing other programs,
 for example, if you have a program that handles files, and you want to test you program's behavior with a file of N bytes,
 you could quickly call this program, and it would create you a file with exactly that size (and data in it ofcourse, currently
-it uses a pattern of '101010' etc).
+it uses a pattern of chars, '101010' etc).
 
 The code can be applyed to anny program that isnt using memory mapping with the intet of copying it, mapped memory makes it so much faster
 than IO operations directly to the disk.
