@@ -1,6 +1,8 @@
 # mmaped_copy
 (EXPERIMENTAL) MMap memory file copy
 
+-- This README is not up-to-date
+
 This code creates a file with N bytes in very little time, as its purpouse initially was for testing other programs,
 for example, if you have a program that handles files, and you want to test you program's behavior with a file of N bytes,
 you could quickly call this program, and it would create you a file with exactly that size (and data in it ofcourse, currently
