@@ -13,26 +13,42 @@
 #include <cerrno>
 #include <system_error>
 
+#define BUFFER_SIZE 4096
+
+    // argv[1] = output file
+    // argv[2] = input file
+
+void cleanup(const int ifd, const int ofd, void * imf, void * omf, int ifs, int ofs)
+{
+    std::cout << "Mr Clean.\n";
+    ::munmap(imf, ifs);
+    ::munmap(omf, ofs);
+    ::close(ofd);
+    ::close(ifd);
+}
+
 
 
 
 
 int main(int argc, char ** argv)
 {
-    int output_file_descriptor;
+    int output_file_descriptor = -1;
     char * mapped_output_file = nullptr;
+
+    size_t output_file_size = 0;
+    
+    int input_file_descriptor = -1;
+    char * mapped_input_file = nullptr;
+
+    size_t input_file_size = 0;
 
     char * buffer = nullptr;
 
-    size_t data_written = 0;
-    
+    size_t data_written = 0;    
     size_t missing_bytes = 0;
     size_t bytes_to_write = 1024;
 
-    size_t output_file_size = 0;
-    size_t output_file_final_size = 0;
-    
-    size_t buffer_size = 0;
 
     if(argc != 3)
     {
@@ -40,113 +56,140 @@ int main(int argc, char ** argv)
         return 1;
     }
 
+    std::cout << "Handling input.\n";
+
+    input_file_descriptor = ::open(argv[2], O_RDWR);
+    if(input_file_descriptor == -1)
+    {
+        std::cout << "(input open) " << std::error_code(errno, std::system_category()).message();
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
+        return 1;
+    }
+
+    input_file_size = ::lseek64(input_file_descriptor, 0, SEEK_END);
+    if(input_file_size == -1)
+    {
+        std::cout << "(lseek intput)" << std::error_code(errno, std::system_category()).message();
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
+        return 1;
+    }
+
+    mapped_input_file =  static_cast<char *>(::mmap64(nullptr, input_file_size, PROT_READ, MAP_SHARED, input_file_descriptor,0));
+    if(mapped_input_file == MAP_FAILED)
+    {
+        std::cout << "(mmap input)" << std::error_code(errno, std::system_category()).message();
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
+        return 1;
+    }
+
+    std::cout << "Handling output.\n";
+
     output_file_descriptor = ::open(argv[1], O_CREAT | O_RDWR);
     if(output_file_descriptor == -1)
     {
         std::cout << "(output open) " << std::error_code(errno, std::system_category()).message();
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
         return 1;
     }
 
-    output_file_size = std::stoul(argv[2], nullptr, 10);
-    if(output_file_size == 0)
+    output_file_size = ::lseek64(output_file_descriptor, 0, SEEK_END);
+    if(output_file_size == -1)
     {
-        std::cout << "(stoul) fail";
+        std::cout << "(output lseek) " << std::error_code(errno, std::system_category()).message();
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
         return 1;
     }
-
-     if(ftruncate64(output_file_descriptor, output_file_size) != 0)
+    
+    if(output_file_size < input_file_size)
     {
-        std::cout << "(ftruncate) " << std::error_code(errno, std::system_category()).message();
-        return 1;
+        if(::ftruncate64(output_file_descriptor, input_file_size) != 0)
+        {
+            std::cout << "(ftruncate) " << std::error_code(errno, std::system_category()).message();
+            cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
+            return 1;
+        }
+        output_file_size = input_file_size;
     }
-
-    //DEBUG:
-    std::cout << "desired file size: " << output_file_size << "file descriptor: " << output_file_descriptor << "\n";
-    ////////    
-
 
     mapped_output_file =  static_cast<char *>(::mmap64(nullptr, output_file_size, PROT_READ | PROT_WRITE, MAP_SHARED, output_file_descriptor,0));
     if(mapped_output_file == MAP_FAILED)
     {
         std::cout << "(mmap output)" << std::error_code(errno, std::system_category()).message();
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
         return 1;
     }
 
+    std::cout << "Writting changes...\n";
 
+    missing_bytes = input_file_size;
 
-
-
-
-
-
-    std::cout << "buffer data: \n";
-    buffer = new char[1024];
-    for(int i = 0; i < 1024; i++)
+    buffer = (char *)new char[BUFFER_SIZE];
+    if(!buffer)
     {
-        buffer[i] = (i%2)?('1'):('0');
-        std::cout << buffer[i];
+        std::cout << "Failed to allocate buffer.\n";
+        ::munmap(mapped_input_file, input_file_size);
+        ::munmap(mapped_output_file, output_file_size);
+        ::close(output_file_descriptor);
+        ::close(input_file_descriptor);
+        return 1;
     }
-    std::cout << "\n--------------------" << std::endl;
 
-    ////////////////////////////////////////////////////////////////
-    missing_bytes = output_file_size;
-    std::cout << "missing bytes = " << missing_bytes << '\n';
-    std::cout << "bytes to write = " << bytes_to_write << '\n';
-
-    for(int i = 0; data_written < output_file_size; ++i)
+    while(data_written < output_file_size)
     {
-        //std::cout << i << "\n"; debug
-        if(missing_bytes < 1024)
-        {
+        if(missing_bytes < BUFFER_SIZE)
             bytes_to_write = missing_bytes;
-        }
 
-        if(::memcpy(mapped_output_file + data_written, buffer, bytes_to_write) == nullptr)
-        {
-            std::cout << "(memcpy)" << std::error_code(errno, std::system_category()).message();
-            return 1;
-        }
+        ::memcpy(buffer, mapped_input_file + data_written, bytes_to_write);
 
+        ::memcpy(mapped_output_file + data_written, buffer, bytes_to_write);
+        
         data_written += bytes_to_write;
         missing_bytes -= bytes_to_write;
     }
-    ////////////////////////////////////////////////////////////////
+
     std::cout << "\n--End writing--\n";
 
 
-    output_file_final_size = ::lseek64(output_file_descriptor,0 ,SEEK_END);
-
-    if(output_file_final_size == -1 || output_file_final_size != output_file_size)
+    if(::msync(mapped_input_file, input_file_size, MS_SYNC) == -1)
     {
-        std::cout << "(lseek input)" << std::error_code(errno, std::system_category()).message();
+        std::cout << "(msync output)" << std::error_code(errno, std::system_category()).message();
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
         return 1;
     }
-
 
     if(::msync(mapped_output_file, output_file_size, MS_SYNC) == -1)
     {
-        std::cout << "(msync)" << std::error_code(errno, std::system_category()).message();
+        std::cout << "(msync output)" << std::error_code(errno, std::system_category()).message();
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
         return 1;
     }
 
+    output_file_size = ::lseek64(output_file_descriptor,0 ,SEEK_END);
+
+    if(output_file_size != input_file_size)
+    {
+        std::cout << "(lseek output)" << std::error_code(errno, std::system_category()).message();
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
+        return 1;
+    }
+
+    /* not worth (?)
     if(::munmap(mapped_output_file, output_file_size) == -1)
     {
-        std::cout << "(munmap)" << std::error_code(errno, std::system_category()).message();
+        std::cout << "(munmap output)" << std::error_code(errno, std::system_category()).message();
         return 1;
     }
-
-    if(::fsync(output_file_descriptor) == -1)
+    if(::munmap(mapped_input_file, input_file_size) == -1)
     {
-        std::cout << "(fsync)" << std::error_code(errno, std::system_category()).message();
+        std::cout << "(munmap input)" << std::error_code(errno, std::system_category()).message();
+        cleanup()
         return 1;
     }
+    */
 
-    ::close(output_file_descriptor);
 
-    //system("echo 1 > /proc/sys/vm/drop_caches");
+    cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
 
-    std::cout << "\n\noutput file size after all that: " << output_file_size;
-    std::cout << "\n\noutput file size final after all that: " << output_file_final_size;
     std::cout << "\nSucess!" << std::endl;
 
     return 0;
