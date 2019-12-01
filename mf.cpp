@@ -13,6 +13,12 @@
 #include <cerrno>
 #include <system_error>
 
+//threads
+#include <thread>
+
+
+
+
 #define BUFFER_SIZE 4096
 
     // argv[1] = output file
@@ -186,7 +192,6 @@ int main(int argc, char ** argv)
         return 1;
     }
     */
-
 
     cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
 
