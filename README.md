@@ -1,15 +1,8 @@
 # mmaped_copy
 (EXPERIMENTAL) MMap memory file copy
 
--- This README is not up-to-date
-
-This code creates a file with N bytes in very little time, as its purpouse initially was for testing other programs,
-for example, if you have a program that handles files, and you want to test you program's behavior with a file of N bytes,
-you could quickly call this program, and it would create you a file with exactly that size (and data in it ofcourse, currently
-it uses a pattern of chars, '101010' etc).
-
-The code can be applyed to anny program that isnt using memory mapping with the intet of copying it, mapped memory makes it so much faster
-than IO operations directly to the disk.
+Program designned to copy bytes form input file to output file, with optional offset values and focused on speed.
+Made by me, a student interessted by this sort of stuff, with the main pourpose to make something cool and to learn more about memory writting and C++ in the process. The code you see now if far, far from complete, ill change pieces of it and replace it from time to time. Every commit should be working, and at the maxium it would give you compiller warnings, but should work fine, I dont guarantee it tho :) If you encounter anny bug and would like to report it, my discord is is my bio, i should reply within 1 hour to 1 day.
 
 KEEP IN MIND that the speed of wich this code creates your file depends (alot) of what operative system you're using,
 how your kernel intereacts with calls, how much RAM you have in total and available at the runtime, your hardware (type of RAM
