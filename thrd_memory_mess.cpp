@@ -19,8 +19,10 @@
 //#include <math.h>
 #include <cmath>
 
-//threads
-//#include <thread>
+#include <vector>
+#include <thread>
+#include <atomic>
+#include <mutex>
 
 //benchmark test
 #include <chrono>
@@ -28,40 +30,34 @@
 //#define buffer_size 4096
 constexpr uint64_t buffer_size = 4096;
 
+const char * debug = "\033[1;33m[DEBUG]: \033[0m"; // yellow
+const char * error = 	"\033[1;31m[FAIL]:\033[0m"; // red
+const char * succ = "\033[1;32m[SUCESS]:\033[0m"; // green
+const char * start = 	"\033[1;36m[STARTING]:\033[0m"; // cyan
 
+std::mutex thread_locker;
 //void calc_offset(::FileOffsets & offset); // calculates the correct offset for aligned reading (makes it faster if its aligned)
 void cleanup(const int ifd, const int ofd, void * imf, void * omf, int ifs, int ofs); // closes opened files and mmaped files
 
 
-
 struct FileOffsets
 {
-
-    uint64_t low_old_offset = 0;
-    uint64_t low_new_offset = 0;
-    
-    //not implemented yet:
-    //uint64_t high_old_offset = 0;
-    //uint64_t high_new_offset = 0;
+    uint64_t original = 0;
+    uint64_t aligned = 0;
 };
 
-    // argv[1] = output file
-    // argv[2] = input file
-    // argv[3] = offset value
 
-
-void calc_offset(FileOffsets & offset) // aligns a position to file by 512 byte ratio
+void calc_offset(FileOffsets & offset, double(*round_function_pointer)(double),  uint64_t ratio = 512) // aligns a position to file by 512 byte ratio
 {
-    if(offset.low_old_offset % (uint64_t)512)
-        offset.low_new_offset = (floor( offset.low_old_offset / 512.0)) * 512;
+    if(offset.original % (uint64_t)ratio)
+        offset.aligned = ((*round_function_pointer)( offset.original / (ratio/1.0))) * ratio;
     else
-        offset.low_new_offset = offset.low_old_offset;
+        offset.aligned = offset.original;
 }
 
 
 void cleanup(const int ifd, const int ofd, void * imf, void * omf, int ifs, int ofs)
 {
-    std::cout << "Mr Clean.\n";
     ::munmap(imf, ifs);
     ::munmap(omf, ofs);
     ::close(ofd);
@@ -75,6 +71,8 @@ int main(int argc, char ** argv)
     auto timer_start = std::chrono::high_resolution_clock::now();
     //
 
+    std::vector<std::thread> io_threads;
+
     int output_file_descriptor = -1;
     char * mapped_output_file = (char *)MAP_FAILED;
 
@@ -83,39 +81,38 @@ int main(int argc, char ** argv)
     int input_file_descriptor = -1;
     char * mapped_input_file = (char *)MAP_FAILED;
 
-    uint64_t input_file_size = 0;
-
     char * buffer = nullptr;            
 
     uint64_t data_written = 0;    
     uint64_t missing_bytes = 0;
+
+    //??
     uint64_t bytes_to_write = 1024;
 
 
-    ::FileOffsets offsets;
+    ::FileOffsets input_file_pointer_offset;
+    ::FileOffsets input_file_size;
 
     uint64_t data_offset_value = 0;
 
     if(argc != 4)
     {
-        std::cout << "(parms) 3 parms required, " << argv[0] << " <file_path> <file_size> <offset = 0>!\n";
+        std::cout << error << "(parms) 3 parms required, " << argv[0] << " <file_path> <file_size> <offset = 0>!\n";
         return 1;
     }
 
-
-    std::cout << "Hanlding offset.\n";
-    try{offsets.low_old_offset = std::stoul(argv[3], 0, 10);}
+    try{input_file_pointer_offset.original = std::stoul(argv[3], 0, 10);}
     catch(...)
     {
-        std::cout << "Invalid value for offset\n";
+        std::cout << error << "Invalid value for offset\n";
         return 1;
     }    
     
-    calc_offset(offsets);
+    calc_offset(input_file_pointer_offset,&floor);
 
-    std::cout << "Handling input.\n";
+    std::cout << debug << "Offsetvalue: " << input_file_pointer_offset.aligned;
 
-
+    //getchar();
 
     auto file_organizer = [argv](int & file_descriptor, 
                             uint64_t & file_size, 
@@ -125,12 +122,12 @@ int main(int argc, char ** argv)
                             int file_maped_flags, 
                             int size_to_truncate = 0) -> int
     {
-        std::cout << "argv["<<parameter<<"] = " << argv[parameter] << '\n';
+        std::cout << debug << "argv["<<parameter<<"] = " << argv[parameter] << '\n';
 
         file_descriptor = ::open(argv[parameter], file_flags);
         if(file_descriptor == -1)
         {
-            std::cout << "(::open) " << std::error_code(errno, std::system_category()).message();
+            std::cout << error << "(::open) " << std::error_code(errno, std::system_category()).message();
             return 1;
         }
 
@@ -138,35 +135,33 @@ int main(int argc, char ** argv)
         if(file_size == -1)
         {
             ::close(file_descriptor);
-            std::cout << "(::lseek)" << std::error_code(errno, std::system_category()).message();
+            std::cout << error << "(::lseek)" << std::error_code(errno, std::system_category()).message();
             return 1;
         }
 
         if(file_size < size_to_truncate && size_to_truncate != 0)
         {
-            std::cout << "size to truncate = " << size_to_truncate << '\n';
+            std::cout << debug << "size to truncate = " << size_to_truncate << '\n';
 
             if(::ftruncate64(file_descriptor, size_to_truncate) != 0)
             {
-                std::cout << "(::ftruncate64) " << std::error_code(errno, std::system_category()).message();
+                std::cout << error << "(::ftruncate64) " << std::error_code(errno, std::system_category()).message();
                 return 1;
             }
             file_size = ::lseek64(file_descriptor, 0, SEEK_END);
             if(file_size == -1)
             {
                 ::close(file_descriptor);
-                std::cout << "(::lseek)" << std::error_code(errno, std::system_category()).message();
+                std::cout << error << "(::lseek)" << std::error_code(errno, std::system_category()).message();
                 return 1;
             }
-            std::cout << "Size of file truncated = " << file_size << '\n';
-            //file_size = size_to_truncate;
         }
     
         *file_maped =  static_cast<char *>(::mmap64(nullptr, file_size, file_maped_flags, MAP_SHARED, file_descriptor, /*offset_value*/0));
         if(file_maped == MAP_FAILED)
         {
             ::close(file_descriptor);
-            std::cout << "(::mmap)" << std::error_code(errno, std::system_category()).message();
+            std::cout << error << "(::mmap)" << std::error_code(errno, std::system_category()).message();
             return 1;
         }
         return 0;
@@ -174,7 +169,7 @@ int main(int argc, char ** argv)
 
     if(file_organizer(
     input_file_descriptor,
-    input_file_size,
+    input_file_size.original,
     &mapped_input_file,
     2,
     O_RDONLY,
@@ -188,133 +183,113 @@ int main(int argc, char ** argv)
     1,
     O_CREAT | O_RDWR,
     PROT_READ | PROT_WRITE,
-    (input_file_size - offsets.low_old_offset)
+    (input_file_size.original - input_file_pointer_offset.original)
     )) return 1;
 
+    std::atomic<uint64_t> total_data_written{0};
+    uint64_t thread_block_size{0};
+    uint64_t input_block_size{0};
+    uint8_t number_of_threads{2};
 
-    std::cout << "Writting changes...\n";
-
-
-    missing_bytes = input_file_size - offsets.low_old_offset;
-    data_offset_value = offsets.low_old_offset - offsets.low_new_offset;
-
-
-    if(mapped_input_file == MAP_FAILED) std::cout << "map failed.\n"; // OK
-    if(mapped_output_file == MAP_FAILED) std::cout << "map failed.\n"; //OK
-
-    /*
-    getchar();
-        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
-        return 0;
-    */
-
-
-    // NO FREE() YET
-    buffer = new char[buffer_size];
-    if(!buffer)
+    auto threaded_memory_copy = [&total_data_written, thread_block_size]
+    (char * calculated_input_file_pointer,
+    char * calculated_output_file_pointer,
+    uint64_t thread_id) 
     {
-        std::cout << "Failed to allocate buffer.\n";
-        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
-        return 1;
-    }
+        uint64_t bytes_to_write = buffer_size;
+        uint64_t local_data_written = 0;
+        uint64_t local_missing_bytes = thread_block_size;
 
+        while(local_data_written < thread_block_size)
+        {
+            if(local_missing_bytes < buffer_size)
+                bytes_to_write = local_missing_bytes;
+            
+            ::memcpy(calculated_output_file_pointer + local_data_written, calculated_input_file_pointer + local_data_written, bytes_to_write);  
 
-    std::cout << "DEGUB:\n";
-    std::cout << "input file size: \t" << input_file_size << '\n';
-    std::cout << "output file size: \t" << output_file_size << "\n\n\n";
-    std::cout << "buffer address = \t" << &buffer << '\n';
-    std::cout << "mapped_input address = \t" << &mapped_input_file << '\n';
-    std::cout << "data_written = \t" << data_written << '\n';
-    std::cout << "offsets.low_new_offset = \t" << offsets.low_new_offset << '\n';
+            local_data_written += bytes_to_write;
+            local_missing_bytes -= bytes_to_write;
+        }
 
-    /*
-    for(int k = 0; k < buffer_size; ++k)
-    {
-        std::cout << buffer[k] << '\n';
-    }
-    */
-    
-    /*
-    getchar();
-    cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
-    return 0;
-    */
-
-    auto copymem = [&missing_bytes, 
-                    &bytes_to_write, 
-                    &buffer, 
-                    &mapped_input_file,
-                    &mapped_output_file, 
-                    &data_written, 
-                    &offsets,
-                    data_offset_value]() 
-    {
-            if(missing_bytes < buffer_size)
-                bytes_to_write = missing_bytes;
-
-            ::memcpy(buffer, mapped_input_file + data_written + offsets.low_new_offset, bytes_to_write);
-
-
-            std::cout << "Loads the buffer OK\n\n";
-
-
-            std::cout << "\n\n\n\n\n\n\nDEBUG:\n";
-            std::cout << "bytes_to_write = " << bytes_to_write << '\n';
-            std::cout << "data_written = " << data_written << '\n';
-            std::cout << "data_offset_value = " << data_offset_value << '\n';
-
-
-
-            buffer[0] = 'A';
-
-            ::memcpy(mapped_output_file + data_written, buffer + data_offset_value, bytes_to_write);
-
-            std::cout << "Writes to output OK\n\n";
-
-            data_written += bytes_to_write;
-            missing_bytes -= bytes_to_write;
+        total_data_written += thread_block_size;
     };
 
-    copymem();
-    data_offset_value = 0;
-    while(data_written < output_file_size) copymem();
+    std::cout << start << "\n--Writting changes--\n";
+    std::cout << debug << "mapped_output_file = " << (void *)mapped_output_file << '\n';
+    std::cout << debug << "mapped_input_file = " << (void *)mapped_input_file << '\n';
+    std::cout << debug << "input_file_size.original = " << input_file_size.original << '\n';
+    std::cout << debug << "output_file_size = " << output_file_size << '\n';
 
 
-    std::cout << "\n--End writing--\n";
+    calc_offset(input_file_size,&ceil, 512); // we calculate the aligned value of the file size, use use for thread-block alignement
+
+    char * debug_buffer = new char[512];
+
+    // Arranjar o inicio
+    ::memcpy(debug_buffer, mapped_input_file + input_file_pointer_offset.aligned, 512);
+    ::memcpy(mapped_output_file, debug_buffer + (input_file_pointer_offset.original - input_file_pointer_offset.aligned), 512 - (input_file_pointer_offset.original - input_file_pointer_offset.aligned));
+    total_data_written += 512 - (input_file_pointer_offset.original - input_file_pointer_offset.aligned);
+
+    uint64_t y_value = (input_file_size.original - (input_file_size.aligned - 512));
+    ::memcpy(mapped_output_file + (input_file_size.original - input_file_pointer_offset.original - y_value), mapped_input_file + input_file_size.aligned - 512, y_value);
+
+    total_data_written += y_value;
+
+    input_block_size = (input_file_size.original - (y_value + input_file_pointer_offset.aligned + 512));
+    thread_block_size = input_block_size / number_of_threads; /*nr de threads*/
 
 
-    if(::msync(mapped_input_file, input_file_size, MS_SYNC) == -1)
+    mapped_input_file += (input_file_pointer_offset.aligned + 512);
+    mapped_output_file += 512;
+
+
+
+    std::cout << debug << "mapped_input_file: " << (void *)mapped_input_file << '\n';
+    //
+    io_threads.emplace_back(std::thread(threaded_memory_copy, mapped_input_file , mapped_output_file, 0));
+    io_threads.emplace_back(std::thread(threaded_memory_copy, mapped_input_file + thread_block_size , mapped_output_file + thread_block_size, 1));
+
+    for(int i = 0; i < number_of_threads; ++i)
+        io_threads[i].join();
+
+    std::cout << succ << "\n--End writing--\n";
+    mapped_input_file -= (input_file_pointer_offset.aligned + 512); // damos fix ao fix
+    mapped_output_file -= 512; // same aqui
+
+
+
+    if(::msync(mapped_input_file, input_file_size.original, MS_SYNC) == -1)
     {   
-        std::cout << "(msync output)" << std::error_code(errno, std::system_category()).message();
-        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
+        std::cout << error << "(msync input)" << std::error_code(errno, std::system_category()).message() << '\n';
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size.original,output_file_size);
         return 1;
     }
 
     if(::msync(mapped_output_file, output_file_size, MS_SYNC) == -1)
     {
-        std::cout << "(msync output)" << std::error_code(errno, std::system_category()).message();
-        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
+        std::cout << error << "(msync output)" << std::error_code(errno, std::system_category()).message() << '\n';
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size.original,output_file_size);
         return 1;
     }
 
     output_file_size = ::lseek64(output_file_descriptor,0 ,SEEK_END);
 
-    if(output_file_size != input_file_size - offsets.low_old_offset)
+    if(output_file_size != input_file_size.original - input_file_pointer_offset.original)
     {
-        std::cout << "(lseek output)" << std::error_code(errno, std::system_category()).message();
-        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
+        std::cout << error << "(lseek output)" << std::error_code(errno, std::system_category()).message() << '\n';
+        cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size.original,output_file_size);
         return 1;
     }
 
-    cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size,output_file_size);
+    cleanup(input_file_descriptor,output_file_descriptor,mapped_input_file,mapped_output_file,input_file_size.original,output_file_size);
     delete[] buffer;
 
     //BENCHMARK
     auto timer_finish = std::chrono::high_resolution_clock::now();
     //  
     
-    std::cout << "\nSucess!\n";
-    std::cout << "Duration: " <<  static_cast<std::chrono::duration<double>>(timer_finish - timer_start).count() << std::endl;
+    std::cout << succ << "The programm has finnished.\n";
+    std::cout << debug << "Duration: " <<  static_cast<std::chrono::duration<double>>(timer_finish - timer_start).count() << std::endl;
 
     return 0;
 }
