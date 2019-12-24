@@ -1,7 +1,5 @@
 # mmaped_copy
 (EXPERIMENTAL) MMap memory file copy
-BRO DONT CLONE THIS YET, I FOUND OUT ALOT OF SMALL BUGS IN THE CODE THAT WILL NOT GIVE YOU THE RESULT U'RE EXPECTING. WAIT FOR ME TO PATCH AND UPLOAD A WORKING VERSION OF THIS CODE BEFORE CLONING. IF U'RE READING THIS MESSAGE IT MEANS THAT THE CURRENT VERSION IS BAD AND SHOULD NOT BE CLONED. THANK YOU FOR UNDERSTANDING (: MERRY XMAS
-
 
 Program designned to copy bytes form input file to output file, with optional offset values and focused on speed.
 Made by me, a student interessted by this sort of stuff, with the main pourpose to make something cool and to learn more about memory writting and C++ in the process. The code you see now if far, far from complete, ill change pieces of it and replace it from time to time. Every commit should be working, and at the maxium it would give you compiller warnings, but should work fine, I dont guarantee it tho :) If you encounter anny bug and would like to report it, my discord is is my bio, i should reply within 1 hour to 1 day.
