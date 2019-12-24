@@ -66,22 +66,9 @@ void cleanup(const int ifd, const int ofd, void * imf, void * omf, int ifs, int 
     ::close(ifd);
 }
 
-/*
-// TO ADD IN FUTURE
-bool enable_output = true;
-template<typename... T> static void tdump(T... args) {if(enable_output)((std::cout << args), ...);}
-*/
-
 
 int main(int argc, char ** argv)
 {
-    /*
-    BUG LIST:
-        se o offset value > tamanho do ficheiro ele vomita se todo
-
-    */
-
-
     //BENCHMARK
     auto timer_start = std::chrono::high_resolution_clock::now();
     //
@@ -221,26 +208,6 @@ int main(int argc, char ** argv)
         calc_offset(bytes_to_read,&ceil, 512);
 
 
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-
     auto memory_writter = [&total_data_written, &block_size]
     (char * calculated_input_file_pointer,
     char * calculated_output_file_pointer)
@@ -269,17 +236,6 @@ int main(int argc, char ** argv)
 
     block_size = bytes_to_read.original; // size of the block in bytes to read from input file to output file
 
-
-    std::cout << debug << "mapped_input_file = " << (void *)mapped_input_file << '\n';
-    std::cout << debug << "mapped_output_file = " << (void *)mapped_output_file << '\n';
-    std::cout << debug << "input_file_pointer_offset.original = " << input_file_pointer_offset.original << '\n';
-    std::cout << debug << "input_file_pointer_offset.aligned = " << input_file_pointer_offset.aligned << '\n';
-    std::cout << debug << "bytes_to_read.original = " << bytes_to_read.original << '\n';
-    std::cout << debug << "bytes_to_read.aligned = " << bytes_to_read.aligned << '\n';
-    std::cout << debug << "output_file_size = " << output_file_size << '\n';
-    //std::cout << debug << "" << << '\n';
-
-
     if(block_size <= 4096)
     {   // Le mos tudo de uma vez
         std::cout << debug << "block_size <= 4096\n";
@@ -289,8 +245,6 @@ int main(int argc, char ** argv)
     }
     else
     {
-        std::cout << debug << "block_size > 4096\n";
-        //Lemos os primeiros bytes do inicio para o ficheiro ficar alinhado
         uint64_t offset_gap_value{(512 - (input_file_pointer_offset.original - input_file_pointer_offset.aligned))};
 
         uint64_t x_value{(input_file_pointer_offset.aligned + 512) - input_file_pointer_offset.original};
@@ -304,25 +258,14 @@ int main(int argc, char ** argv)
 
         mapped_input_file += (input_file_pointer_offset.aligned + 512);
         mapped_output_file += x_value;
+      
+        block_size -= (y_value + x_value);
         
-        std::cout << debug << "(1)block_size = " << block_size << '\n';
-
-        block_size -= (y_value + x_value); // ?? Aindo n tenho 100% certeza disto
-
-        std::cout << debug << "(2)block_size = " << block_size << '\n';
-
         block_size /= number_of_threads;
-
-        std::cout << debug << "(3)block_size = " << block_size << '\n';
-
-        std::cout << debug << "x_value = " << x_value << '\n';
-        std::cout << debug << "y_value = " << y_value << '\n';
-
 
         for(int i = 0; i < number_of_threads; ++i)
             io_threads.emplace_back(std::thread(memory_writter, mapped_input_file + (i * block_size) , mapped_output_file + (i * block_size)));
-        //io_threads.emplace_back(std::thread(threaded_memory_copy, mapped_input_file + thread_block_size , mapped_output_file + thread_block_size, 1));
-
+        
         for(int i = 0; i < number_of_threads; ++i)
             io_threads[i].join();
 
@@ -331,31 +274,6 @@ int main(int argc, char ** argv)
     }
 
     std::cout << succ << "End writing!\n";
-
-
-    std::cout << debug << "mapped_output_file = " << (void *)mapped_output_file << '\n';
-    std::cout << debug << "mapped_input_file = " << (void *)mapped_input_file << '\n';
-    std::cout << debug << "input_file_size.original = " << input_file_size.original << '\n';
-    std::cout << debug << "output_file_size = " << output_file_size << '\n';
-    //getchar();
-
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
 
     if(::msync(mapped_input_file, input_file_size.original, MS_SYNC) == -1)
     {   
@@ -392,193 +310,3 @@ int main(int argc, char ** argv)
 
     return 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        /*
-        thread_locker.lock();
-        //DEBUG
-        std::cout << "----------------THREAD NR " << thread_id << "SAYS: --------------\n";
-        std::cout << "calculated_input_file_pointer = " << (void *)calculated_input_file_pointer << '\n';
-        std::cout << "calculated_output_file_pointer = " << (void *)calculated_output_file_pointer << '\n';
-        std::cout << "thread_id = " << thread_id << '\n';
-        std::cout << "thread_block_size = " << thread_block_size << '\n';
-        std::cout << "buffer_size = " << buffer_size << '\n';
-        //std::cout << "missing_bytes = " << missing_bytes << '\n';
-        //std::cout << "input_file_size.original = " << input_file_size.original << '\n';
-        //std::cout << "input_file_size.aligned = " << input_file_size.aligned << '\n';
-        std::cout << "bytes_to_write = " << bytes_to_write << '\n';
-        std::cout << "local_data_written = " << local_data_written << '\n';
-        std::cout << "total_data_written = " << total_data_written << '\n';
-        std::cout << "-----------------------------------------------------------------\n";
-        ///////
-        thread_locker.unlock();
-
-
-    std::cout << debug << "mapped_output_file = " << (void *)mapped_output_file << '\n';
-    std::cout << debug << "mapped_input_file = " << (void *)mapped_input_file << '\n';
-    std::cout << debug << "mapped_output_file + (input_file_size.original - input_file_pointer_offset.original - y_value) = " << (void*)(mapped_output_file + (input_file_size.original - input_file_pointer_offset.original - y_value)) << '\n';
-    std::cout << debug << "mapped_input_file + input_file_size.aligned - 512 = " << (void *)(mapped_input_file + input_file_size.aligned - 512) << '\n';
-    std::cout << debug << "y_value = " << y_value << '\n';
-    std::cout << debug << "input_file_size.original = " << input_file_size.original << '\n';
-    std::cout << debug << "input_file_size.aligned = " << input_file_size.aligned << '\n';
-    std::cout << debug << "output_file_size = " << output_file_size << '\n';
-    std::cout << debug << "total_data_written = " << total_data_written << '\n';
-    std::cout << debug << "input_pointer_original = " << input_file_pointer_offset.original << '\n';
-    std::cout << debug << "input_pointer_aligned = " << input_file_pointer_offset.aligned << '\n';
-    
-    getchar();
-    return 0;
-        */
-        //COMMENTED FOR DEBUGGING ----------------------------------------------------------
-        
-
-//REMOVER ISTO?
-    //??? missing_bytes = input_file_size.original - input_file_pointer_offset.original;
-    //data_offset_value = input_file_pointer_offset.original - input_file_pointer_offset.aligned;
-    //if(data_offset_value < 1)  USER RETARDADO, n deixar o programa correr 
-
-
-//FORMA ANTIGA AQUI COMENTADA
-/*
-    auto copymem = [&missing_bytes, 
-                    &bytes_to_write, 
-                    &buffer, 
-                    &mapped_input_file,
-                    &mapped_output_file, 
-                    &data_written, 
-                    &input_file_pointer_offset,
-                    data_offset_value]() 
-    {
-            if(missing_bytes < buffer_size)
-                bytes_to_write = missing_bytes;
-
-            ::memcpy(buffer, mapped_input_file + data_written + input_file_pointer_offset.aligned, bytes_to_write);
-            
-            ::memcpy(mapped_output_file + data_written, buffer + data_offset_value, bytes_to_write);
-
-            data_written += bytes_to_write;
-            missing_bytes -= bytes_to_write;
-    };
-*/
-
-
-    /*
-    copymem();
-    data_offset_value = 0;
-    while(data_written < output_file_size) copymem();
-    */
-
-
-
-
-/*
-
-    auto threaded_memory_copy = [&total_data_written, &thread_block_size]
-    (char * calculated_input_file_pointer, 
-    char * calculated_output_file_pointer, 
-    uint64_t thread_id) 
-    {
-        
-        azorius.lock();
-        std::cout << debug << "...................." << thread_id << "....................\n";
-        std::cout << debug << "calculated_input_file_pointer = " << (void *)calculated_input_file_pointer << '\n';
-        std::cout << debug << "calculated_output_file_pointer = " << (void *)calculated_output_file_pointer << '\n';
-        std::cout << debug << "total_data_written = " << total_data_written << '\n';
-        std::cout << debug << "thread_block_size = " << thread_block_size << '\n';
-        std::cout << debug << ".........................................\n";
-        azorius.unlock();
-        
-        uint64_t bytes_to_write = buffer_size;
-        uint64_t local_data_written = 0;
-        uint64_t local_missing_bytes = thread_block_size;
-
-        while(local_data_written < thread_block_size)
-        {
-            if(local_missing_bytes < buffer_size)
-                bytes_to_write = local_missing_bytes;
-            
-            ::memcpy(calculated_output_file_pointer + local_data_written, calculated_input_file_pointer + local_data_written, bytes_to_write);  
-
-            local_data_written += bytes_to_write;
-            local_missing_bytes -= bytes_to_write;
-        }
-
-        total_data_written += thread_block_size;
-    };
-*/
-
-
-
-
-/*
-
-// PARTE QUE ARRANJAR O INICIO E O FIM DO FICHEIRO paa simplificar a matematica com as threads
-// isto tem de ser revisto por causa do bytes_to_read
-////////////////////////////////////////////////////////////////////////////////////////////////////
-    ::memcpy(debug_buffer, mapped_input_file + input_file_pointer_offset.aligned, 512);
-    ::memcpy(mapped_output_file, debug_buffer + (input_file_pointer_offset.original - input_file_pointer_offset.aligned), 512 - (input_file_pointer_offset.original - input_file_pointer_offset.aligned));
-    total_data_written += 512 - (input_file_pointer_offset.original - input_file_pointer_offset.aligned);
-
-    //Arranjar o fim
-    uint64_t y_value = (input_file_size.original - (input_file_size.aligned - 512));
-    ::memcpy(mapped_output_file + (input_file_size.original - input_file_pointer_offset.original - y_value), mapped_input_file + input_file_size.aligned - 512, y_value);
-////////////////////////////////////////////////////////////////////////////////////////////////////
-    total_data_written += y_value;
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-
-
-
-
-    // a partir daqui, o tamanho que temos para ler é de (0 + 512) até (input_file_size.original - y_value )
-    // e é esse valor que vamos distribuir pelas threads.
-
-    //missing_bytes = (input_file_size - 512) - y_value;
-
-    //tamanho do bloc que ainda falta ler:
-    input_block_size = (input_file_size.original - (y_value + input_file_pointer_offset.aligned + 512));
-    //////////////////////////////////////
-    block_size = input_block_size / number_of_threads; //nr de threads
-
-
-
-    */
